@@ -1,0 +1,49 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+          clang --version | head -2
+
+      - name: Install ldid
+        run: |
+          brew install ldid 2>/dev/null || brew install ProcursusTeam/ldid/ldid || true
+          which ldid && ldid -v || echo "ldid missing, will fall back to codesign only"
+
+      - name: Build
+        run: |
+          chmod +x build.sh
+          export SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
+          echo "SDK=$SDK"
+          ./build.sh
+
+      - name: Verify bundle
+        run: |
+          ls -la build/
+          unzip -l build/*.ipa | grep -E "lproj|Info.plist" || true
+          PLIST="build/Payload/BQTool.app/Info.plist"
+          if [ -f "$PLIST" ]; then
+            /usr/libexec/PlistBuddy -c "Print :CFBundleLocalizations" "$PLIST"
+          fi
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Gester-zh-ipa
+          path: build/*.ipa
+          retention-days: 30
