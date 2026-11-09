@@ -1,49 +1,40 @@
 name: Build IPA
-
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main ]
   workflow_dispatch:
 
 jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: alive
+        run: |
+          echo "ubuntu runner ok"
+          uname -a
+
   build:
     runs-on: macos-14
+    needs: probe
     timeout-minutes: 30
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Show toolchain
+      - uses: actions/checkout@v4
+      - name: Toolchain
         run: |
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-path
-          clang --version | head -2
-
       - name: Install ldid
-        run: |
-          brew install ldid 2>/dev/null || brew install ProcursusTeam/ldid/ldid || true
-          which ldid && ldid -v || echo "ldid missing, will fall back to codesign only"
-
+        run: brew install ldid 2>/dev/null || brew install ProcursusTeam/ldid/ldid || true
       - name: Build
         run: |
           chmod +x build.sh
           export SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
-          echo "SDK=$SDK"
           ./build.sh
-
-      - name: Verify bundle
+      - name: Verify
         run: |
           ls -la build/
-          unzip -l build/*.ipa | grep -E "lproj|Info.plist" || true
-          PLIST="build/Payload/BQTool.app/Info.plist"
-          if [ -f "$PLIST" ]; then
-            /usr/libexec/PlistBuddy -c "Print :CFBundleLocalizations" "$PLIST"
-          fi
-
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
+          unzip -l build/*.ipa | grep -E "lproj" || true
+      - uses: actions/upload-artifact@v4
         with:
           name: Gester-zh-ipa
           path: build/*.ipa
-          retention-days: 30
